@@ -1,10 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace ExerciseThree
 {
+    public class Coupon { }
+    public interface ICouponProvider 
+    {
+        Task<Coupon> Retrieve(Guid couponId);    
+    }
+
+    public interface ILogger
+    {
+
+    }
+
     public class CouponManager
     {
         private readonly ILogger _logger;
