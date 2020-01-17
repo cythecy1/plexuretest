@@ -1,0 +1,100 @@
+1.  Use dependency injection on the construtor.	
+	
+INSTEAD OF THIS:
+
+    public ItineraryManager()
+    {
+        _dataStore = new SqlAgentStore(ConfigurationManager.ConnectionStrings["SqlDbConnection"].ConnectionString);
+        _distanceCalculator = new GoogleMapsDistanceCalculator(ConfigurationManager.AppSettings["GoogleMapsApiKey"]);
+    }
+  
+TRY THIS:
+
+    public ItineraryManager(IDataStore dataStore, IDistanceCalculator distanceCalculator)
+    {
+        _dataStore = dataStore;
+        _distanceCalculator = distanceCalculator;
+    }
+
+--------------------------------------------------
+2.  Use async and await instead of .Result otherwise you'll run at current sync context. 
+*Also you misspelled itinerary in GetItinary.
+
+INSTEAD OF THIS:
+
+public IEnumerable<Quote> CalculateAirlinePrices(int itineraryId, IEnumerable<IAirlinePriceProvider> priceProviders)
+    {
+        var itinerary = _dataStore.GetItinaryAsync(itineraryId).Result;
+
+
+TRY THIS:
+
+public async Task<IEnumerable<Quote>> CalculateAirlinePrices(int itineraryId, IEnumerable<IAirlinePriceProvider> priceProviders)
+    {
+        var itinerary = await _dataStore.GetItinaryAsync(itineraryId).Result; 
+
+--------------------------------------------------
+
+3.  Parallel.ForEach is ok just make sure the sorting of providers is not important
+
+        List<Quote> results = new List<Quote>();
+        Parallel.ForEach(priceProviders, provider =>
+        {
+            var quotes = provider.GetQuotes(itinerary.TicketClass, itinerary.Waypoints);
+            foreach (var quote in quotes)
+                results.Add(quote);
+        });
+        return results;
+
+--------------------------------------------------
+
+4.  IndexOutOfRangeException here.  Waypoints[i+1] on the last loop will throw an exception.
+
+        for(int i=0; i<itinerary.Waypoints.Count-1; i++)
+        {
+            result = result + _distanceCalculator.GetDistanceAsync(itinerary.Waypoints[i],
+                 itinerary.Waypoints[i + 1]).Result;
+        }
+
+--------------------------------------------------
+
+5.  You can use Parallel For on getting total as order is not important in getting sum.
+*Always  await when using Async versions.
+
+INSTEAD OF THIS:
+        for(int i=0; i<itinerary.Waypoints.Count-1; i++)
+        {
+            result = result + _distanceCalculator.GetDistanceAsync(itinerary.Waypoints[i],
+                 itinerary.Waypoints[i + 1]).Result;
+        }
+
+TRY THIS:
+
+            double totalDistanceTravel = 0;
+            int waypointsCount = itinerary.Waypoints.Count;
+            Parallel.For(0, waypointsCount, async index => {
+                if(index < waypointsCount - 1)
+                {
+                    var distance = await _distanceCalculator.GetDistanceAsync(itinerary.Waypoints[index], itinerary.Waypoints[index + 1])
+                    totalDistanceTravel += distance;
+                }                
+            });
+            return totalDistanceTravel;
+
+
+--------------------------------------------------
+6.  This method should not be updating the object.  Violates single responsibility.
+
+    public TravelAgent FindAgent(int id, string updatedPhoneNumber)
+    {
+        var agentDao = _dataStore.GetAgent(id);
+        if (agentDao == null)
+            return null;
+        if (!string.IsNullOrWhiteSpace(updatedPhoneNumber))
+        {
+            agentDao.PhoneNumber = updatedPhoneNumber;
+            _dataStore.UpdateAgent(id, agentDao);
+        }
+        return Mapper.Map<TravelAgent>(agentDao);
+    }
+
